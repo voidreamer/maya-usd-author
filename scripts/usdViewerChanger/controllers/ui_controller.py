@@ -1,5 +1,5 @@
 from typing import Dict, List, Optional, Tuple, Any
-from PySide2 import QtCore, QtWidgets, QtGui
+from PySide6 import QtCore, QtWidgets, QtGui
 
 import maya.cmds as cmds
 import mayaUsd

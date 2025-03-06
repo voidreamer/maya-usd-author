@@ -1,5 +1,5 @@
 from typing import Dict, List, Optional, Union, Set
-from PySide2 import QtCore, QtGui
+from PySide6 import QtCore, QtGui
 
 from pxr import Usd, UsdGeom, Sdf
 

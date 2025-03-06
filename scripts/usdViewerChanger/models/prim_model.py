@@ -1,6 +1,6 @@
 from typing import Dict, List, Optional, Tuple, Any, Generator, Set
 from dataclasses import dataclass
-from PySide2 import QtCore
+from PySide6 import QtCore
 
 from pxr import Usd, UsdGeom, Sdf, Gf
 
