@@ -1,1 +1,1 @@
-import usdViewerChanger
+import maya_usd_editor

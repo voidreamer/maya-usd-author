@@ -1,17 +1,35 @@
+"""USD Prim Editor UI for Maya.
+
+This module provides a graphical interface for editing USD prims within Maya,
+including attributes, primvars, variants, and payloads.
+"""
+
+import logging
+from typing import Any, Dict, Optional
+
 from PySide2 import QtWidgets, QtCore, QtGui
+from pxr import Usd, Sdf, UsdGeom, Gf
+import maya.cmds as cmds
+import mayaUsd
+
 from .usdTreeModel import UsdTreeModel
 from .usdUtils import (
     PrimPurpose, set_prim_kind, set_prim_purpose, get_stage_as_text,
     update_stage_from_text, get_variant_sets, set_variant_selection,
     has_payload, load_payload, unload_payload
 )
-from pxr import Usd, Sdf, UsdGeom, Gf
-import maya.cmds as cmds
-import mayaUsd
+from .constants import (
+    AttributeColors, KIND_VALUES, WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT, WINDOW_TITLE
+)
+
+logger = logging.getLogger(__name__)
 
 
 class ColorCodedItemDelegate(QtWidgets.QStyledItemDelegate):
-    def paint(self, painter, option, index):
+    """Custom item delegate that renders tree items with color coding based on attribute type."""
+
+    def paint(self, painter: QtGui.QPainter, option: QtWidgets.QStyleOptionViewItem,
+              index: QtCore.QModelIndex) -> None:
         if option.state & QtWidgets.QStyle.State_Selected:
             painter.fillRect(option.rect, option.palette.highlight())
 
@@ -22,14 +40,25 @@ class ColorCodedItemDelegate(QtWidgets.QStyledItemDelegate):
 
 
 class UsdPrimEditor(QtWidgets.QWidget):
-    def __init__(self, parent=None):
+    """Main widget for editing USD prims.
+
+    Provides a tree view of the USD stage hierarchy along with editors for:
+    - Kind and Purpose properties
+    - Attributes and Primvars
+    - Time samples
+    - Variant sets
+    - Payload loading/unloading
+    """
+
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super(UsdPrimEditor, self).__init__(parent)
-        self.stage = None
+        self.stage: Optional[Usd.Stage] = None
+        self._selection_connection: Optional[bool] = None
         self.setup_ui()
 
     def setup_ui(self):
-        self.setWindowTitle("USD Prim Editor")
-        self.setMinimumSize(800, 600)
+        self.setWindowTitle(WINDOW_TITLE)
+        self.setMinimumSize(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
 
         treeLayout = QtWidgets.QVBoxLayout()
 
@@ -59,7 +88,7 @@ class UsdPrimEditor(QtWidgets.QWidget):
     def setup_property_editors(self, layout):
         property_layout = QtWidgets.QHBoxLayout()
         self.kind_combo = QtWidgets.QComboBox()
-        self.kind_combo.addItems(["", "component", "subcomponent", "assembly", "group"])
+        self.kind_combo.addItems(KIND_VALUES)
         self.purpose_combo = QtWidgets.QComboBox()
         self.purpose_combo.addItems([p.value for p in PrimPurpose])
 
@@ -234,25 +263,32 @@ class UsdPrimEditor(QtWidgets.QWidget):
         item.setData(0, QtCore.Qt.UserRole, {'color': color})
         item.setData(1, QtCore.Qt.UserRole, {'color': color})
 
-    def get_attribute_color(self, attr):
+    def get_attribute_color(self, attr: Usd.Attribute) -> QtGui.QColor:
+        """Determine the display color for an attribute based on its type.
+
+        Args:
+            attr: The USD attribute.
+
+        Returns:
+            QColor for the attribute's display color.
+        """
         if attr.IsCustom():
-            return QtGui.QColor(255, 255, 0)  # Yellow for custom attributes
+            return AttributeColors.CUSTOM
         elif attr.GetName().startswith('xformOp:'):
-            return QtGui.QColor(200, 200, 255)  # Light blue for transform attributes
+            return AttributeColors.TRANSFORM
         elif isinstance(attr.Get(), Usd.TimeCode):
-            return QtGui.QColor(0, 255, 0)  # Green for time samples
+            return AttributeColors.TIME_CODE
         elif attr.GetTypeName() == 'token':
-            return QtGui.QColor(217, 157, 52)  # Orange for tokens
-        return QtGui.QColor(142, 211, 245)  # Default color
+            return AttributeColors.TOKEN
+        return AttributeColors.DEFAULT
 
     def add_primvar_to_tree(self, primvar):
         item = QtWidgets.QTreeWidgetItem(self.attr_primvar_tree)
         item.setText(0, primvar.GetName())
         item.setText(1, str(primvar.Get()))
 
-        color = QtGui.QColor(0, 255, 255)  # Cyan for primvars
-        item.setData(0, QtCore.Qt.UserRole, {'color': color})
-        item.setData(1, QtCore.Qt.UserRole, {'color': color})
+        item.setData(0, QtCore.Qt.UserRole, {'color': AttributeColors.PRIMVAR})
+        item.setData(1, QtCore.Qt.UserRole, {'color': AttributeColors.PRIMVAR})
 
     def edit_attr_primvar(self):
         item = self.attr_primvar_tree.currentItem()
@@ -270,16 +306,27 @@ class UsdPrimEditor(QtWidgets.QWidget):
             attr = UsdGeom.PrimvarsAPI(prim).GetPrimvar(name).GetAttr() if UsdGeom.Primvar.IsPrimvarName(
                 name) else prim.GetAttribute(name)
             if not attr:
-                print(f"Warning: Could not find attribute or primvar named {name}")
+                logger.warning(f"Could not find attribute or primvar named {name}")
+                QtWidgets.QMessageBox.warning(self, "Warning", f"Could not find attribute or primvar named '{name}'")
                 return
 
             typed_value = self.convert_to_attr_type(new_value, attr.GetTypeName())
             attr.Set(typed_value)
             self.update_attr_primvar_list(prim)
         except Exception as e:
-            print(f"Error setting value: {str(e)}")
+            logger.error(f"Error setting value: {str(e)}")
+            QtWidgets.QMessageBox.critical(self, "Error", f"Failed to set value: {str(e)}")
 
-    def convert_to_attr_type(self, value_str, type_name):
+    def convert_to_attr_type(self, value_str: str, type_name: Sdf.ValueTypeName) -> Any:
+        """Convert a string value to the appropriate USD attribute type.
+
+        Args:
+            value_str: The string representation of the value.
+            type_name: The USD type name to convert to.
+
+        Returns:
+            The converted value, or the original string if type is unsupported.
+        """
         type_converters = {
             Sdf.ValueTypeNames.Bool: lambda x: x.lower() in ('true', '1', 'yes', 'on'),
             Sdf.ValueTypeNames.Int: int,
@@ -297,7 +344,7 @@ class UsdPrimEditor(QtWidgets.QWidget):
         if converter:
             return converter(value_str)
         else:
-            print(f"Warning: Unsupported type {type_name}. Returning string value.")
+            logger.warning(f"Unsupported type {type_name}. Returning string value.")
             return value_str
 
     def add_attribute(self):
@@ -338,7 +385,22 @@ class UsdPrimEditor(QtWidgets.QWidget):
             return
 
         prim = self.get_selected_prim()
+        if not prim:
+            return
+
         name = item.text(0)
+
+        # Confirm before removing
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Confirm Removal",
+            f"Are you sure you want to remove '{name}'?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.No
+        )
+
+        if reply != QtWidgets.QMessageBox.Yes:
+            return
 
         if UsdGeom.Primvar.IsPrimvarName(name):
             UsdGeom.PrimvarsAPI(prim).RemovePrimvar(name)
@@ -368,16 +430,23 @@ class UsdPrimEditor(QtWidgets.QWidget):
         try:
             attr = prim.GetAttribute(attr_name)
             if not attr:
-                print(f"Warning: Could not find attribute named {attr_name}")
+                logger.warning(f"Could not find attribute named {attr_name}")
+                QtWidgets.QMessageBox.warning(self, "Warning", f"Could not find attribute named '{attr_name}'")
                 return
 
             typed_value = self.convert_to_attr_type(new_value, attr.GetTypeName())
             attr.Set(typed_value, time)
             self.update_time_samples(prim)
         except Exception as e:
-            print(f"Error setting time sample: {str(e)}")
+            logger.error(f"Error setting time sample: {str(e)}")
+            QtWidgets.QMessageBox.critical(self, "Error", f"Failed to set time sample: {str(e)}")
 
-    def get_selected_prim(self):
+    def get_selected_prim(self) -> Optional[Usd.Prim]:
+        """Get the currently selected prim from the tree view.
+
+        Returns:
+            The selected Usd.Prim, or None if no selection.
+        """
         selected_indexes = self.tree_view.selectedIndexes()
         if not selected_indexes:
             return None
@@ -412,15 +481,25 @@ class UsdPrimEditor(QtWidgets.QWidget):
             proxy_shape, _ = selected[0].split(',')
             self.stage = mayaUsd.ufe.getStage(proxy_shape)
             model = UsdTreeModel(self.stage)
+
+            # Disconnect previous selection signal to prevent memory leak
+            if self._selection_connection is not None:
+                try:
+                    self.tree_view.selectionModel().selectionChanged.disconnect(self.update_property_editors)
+                except RuntimeError:
+                    pass  # Signal was already disconnected
+
             self.tree_view.setModel(model)
             self.tree_view.expandAll()
 
             # Connect the selection changed signal after setting the model
             self.tree_view.selectionModel().selectionChanged.connect(self.update_property_editors)
+            self._selection_connection = True
 
             self.update_stage_text()
         except Exception as e:
-            print(f"Error refreshing tree view: {str(e)}")
+            logger.error(f"Error refreshing tree view: {str(e)}")
+            QtWidgets.QMessageBox.critical(self, "Error", f"Failed to refresh tree view: {str(e)}")
 
     def apply_changes(self):
         prim = self.get_selected_prim()
@@ -439,7 +518,8 @@ class UsdPrimEditor(QtWidgets.QWidget):
 
             self.refresh_tree_view()
         except Exception as e:
-            print(f"Error applying changes: {str(e)}")
+            logger.error(f"Error applying changes: {str(e)}")
+            QtWidgets.QMessageBox.critical(self, "Error", f"Failed to apply changes: {str(e)}")
 
     def update_stage_text(self):
         if self.stage:
@@ -449,11 +529,24 @@ class UsdPrimEditor(QtWidgets.QWidget):
         if not self.stage:
             return
 
+        # Confirm before updating stage from text
+        reply = QtWidgets.QMessageBox.warning(
+            self,
+            "Confirm Stage Update",
+            "This will overwrite the current stage layer. Are you sure?",
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.No
+        )
+
+        if reply != QtWidgets.QMessageBox.Yes:
+            return
+
         try:
             update_stage_from_text(self.stage, self.stage_text_edit.toPlainText())
             self.refresh_tree_view()
         except Exception as e:
-            print(f"Error updating stage: {str(e)}")
+            logger.error(f"Error updating stage: {str(e)}")
+            QtWidgets.QMessageBox.critical(self, "Error", f"Failed to update stage: {str(e)}")
 
     def showEvent(self, event):
         if self.stage:
@@ -462,17 +555,22 @@ class UsdPrimEditor(QtWidgets.QWidget):
 
 
 class UsdPrimEditorWindow(QtWidgets.QMainWindow):
-    def __init__(self, parent=None):
+    """Main window wrapper for the USD Prim Editor widget."""
+
+    def __init__(self, parent: Optional[QtWidgets.QWidget] = None) -> None:
         super().__init__(parent)
         self.setCentralWidget(UsdPrimEditor())
 
 
 def show_usd_prim_editor():
+    """Show the USD Prim Editor window. Closes any existing instance first."""
     global usd_prim_editor
     try:
         usd_prim_editor.close()
         usd_prim_editor.deleteLater()
-    except:
+    except (NameError, RuntimeError):
+        # NameError: usd_prim_editor doesn't exist yet
+        # RuntimeError: Qt object already deleted
         pass
     usd_prim_editor = UsdPrimEditorWindow()
     usd_prim_editor.show()
