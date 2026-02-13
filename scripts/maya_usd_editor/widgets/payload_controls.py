@@ -3,7 +3,7 @@
 import logging
 from typing import Optional
 
-from PySide2 import QtWidgets, QtCore
+from ..qt_compat import QtWidgets, QtCore
 from pxr import Usd
 
 from ..usdUtils import has_payload, load_payload, unload_payload
@@ -28,20 +28,24 @@ class PayloadControls(QtWidgets.QWidget):
 
     def _setup_ui(self) -> None:
         """Set up the widget UI."""
-        layout = QtWidgets.QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        outer_layout = QtWidgets.QVBoxLayout(self)
+        outer_layout.setContentsMargins(0, 0, 0, 0)
 
-        layout.addWidget(QtWidgets.QLabel("Payload:"))
+        group = QtWidgets.QGroupBox("Payloads")
+        layout = QtWidgets.QHBoxLayout(group)
+        layout.setContentsMargins(6, 6, 6, 6)
+        layout.setSpacing(6)
 
-        self.load_btn = QtWidgets.QPushButton("Load")
+        self.load_btn = QtWidgets.QPushButton("Load Payload")
         self.load_btn.setEnabled(False)
         layout.addWidget(self.load_btn)
 
-        self.unload_btn = QtWidgets.QPushButton("Unload")
+        self.unload_btn = QtWidgets.QPushButton("Unload Payload")
         self.unload_btn.setEnabled(False)
         layout.addWidget(self.unload_btn)
 
         layout.addStretch()
+        outer_layout.addWidget(group)
 
     def _connect_signals(self) -> None:
         """Connect internal signals."""

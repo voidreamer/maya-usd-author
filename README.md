@@ -17,7 +17,7 @@ A simple yet powerful tool for authoring USD (Universal Scene Description) edits
 
 - Autodesk Maya 2022+ with MayaUSD plugin
 - Python 3.7+
-- PySide2
+- PySide2 (Maya 2025 and earlier) or PySide6 (Maya 2026+)
 
 ## Installation
 
@@ -132,6 +132,8 @@ maya-usd-author/
 ├── scripts/
 │   └── maya_usd_editor/
 │       ├── __init__.py          # Package entry point
+│       ├── qt_compat.py         # PySide2/PySide6 compatibility shim
+│       ├── style.py             # Centralized dark stylesheet
 │       ├── usdPrimEditorUI.py   # Main UI
 │       ├── usdTreeModel.py      # Tree data model
 │       ├── usdUtils.py          # USD utilities

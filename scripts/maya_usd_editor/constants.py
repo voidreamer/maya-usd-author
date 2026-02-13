@@ -1,6 +1,6 @@
 """Constants and configuration values for the USD Prim Editor."""
 
-from PySide2.QtGui import QColor
+from .qt_compat import QColor
 
 
 # Attribute color coding
