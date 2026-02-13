@@ -7,7 +7,7 @@ including attributes, primvars, variants, and payloads.
 import logging
 from typing import Optional
 
-from PySide2 import QtWidgets, QtCore
+from .qt_compat import QtWidgets, QtCore
 from pxr import Usd, Sdf
 import maya.cmds as cmds
 import mayaUsd
@@ -23,6 +23,7 @@ from .constants import (
 from .widgets import (
     AttributeEditor, TimeSamplesEditor, VariantEditor, PayloadControls
 )
+from .style import apply_stylesheet
 
 logger = logging.getLogger(__name__)
 
@@ -52,47 +53,74 @@ class UsdPrimEditor(QtWidgets.QWidget):
         self.setWindowTitle(WINDOW_TITLE)
         self.setMinimumSize(WINDOW_MIN_WIDTH, WINDOW_MIN_HEIGHT)
 
-        # Main horizontal layout
-        main_layout = QtWidgets.QHBoxLayout(self)
+        main_layout = QtWidgets.QVBoxLayout(self)
+        main_layout.setContentsMargins(6, 6, 6, 6)
+        main_layout.setSpacing(6)
 
-        # Left panel: Tree view and controls
-        left_panel = QtWidgets.QVBoxLayout()
-        self._setup_tree_view(left_panel)
-        self._setup_property_editors(left_panel)
-        self._setup_action_buttons(left_panel)
-        self._setup_stage_text_editor(left_panel)
+        # Resizable horizontal splitter
+        splitter = QtWidgets.QSplitter(QtCore.Qt.Horizontal)
 
-        # Variant editor widget
+        # ── Left panel ──
+        left_widget = QtWidgets.QWidget()
+        left_layout = QtWidgets.QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(6)
+
+        self._setup_tree_view(left_layout)
+        self._setup_prim_properties(left_layout)
+        self._setup_stage_text_editor(left_layout)
+
+        # Variant editor
         self.variant_editor = VariantEditor()
-        left_panel.addWidget(self.variant_editor)
+        left_layout.addWidget(self.variant_editor)
 
-        # Payload controls widget
+        # Payload controls
         self.payload_controls = PayloadControls()
-        left_panel.addWidget(self.payload_controls)
+        left_layout.addWidget(self.payload_controls)
 
-        main_layout.addLayout(left_panel)
+        splitter.addWidget(left_widget)
 
-        # Right panel: Attribute and time samples editors
-        right_panel = QtWidgets.QVBoxLayout()
+        # ── Right panel ──
+        right_widget = QtWidgets.QWidget()
+        right_layout = QtWidgets.QVBoxLayout(right_widget)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(6)
 
         self.attribute_editor = AttributeEditor()
-        right_panel.addWidget(self.attribute_editor)
+        right_layout.addWidget(self.attribute_editor)
 
         self.time_samples_editor = TimeSamplesEditor()
-        right_panel.addWidget(self.time_samples_editor)
+        right_layout.addWidget(self.time_samples_editor)
 
-        main_layout.addLayout(right_panel)
+        splitter.addWidget(right_widget)
+
+        # 60/40 initial ratio
+        splitter.setSizes([600, 400])
+
+        main_layout.addWidget(splitter)
 
     def _setup_tree_view(self, layout: QtWidgets.QVBoxLayout) -> None:
         """Set up the tree view for displaying prim hierarchy."""
+        group = QtWidgets.QGroupBox("Stage Hierarchy")
+        group_layout = QtWidgets.QVBoxLayout(group)
+        group_layout.setContentsMargins(6, 6, 6, 6)
+
         self.tree_view = QtWidgets.QTreeView()
         self.tree_view.setAlternatingRowColors(True)
         self.tree_view.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.tree_view.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
-        layout.addWidget(self.tree_view)
+        group_layout.addWidget(self.tree_view)
 
-    def _setup_property_editors(self, layout: QtWidgets.QVBoxLayout) -> None:
-        """Set up the Kind and Purpose property editors."""
+        layout.addWidget(group)
+
+    def _setup_prim_properties(self, layout: QtWidgets.QVBoxLayout) -> None:
+        """Set up the Kind/Purpose editors and action buttons."""
+        group = QtWidgets.QGroupBox("Prim Properties")
+        group_layout = QtWidgets.QVBoxLayout(group)
+        group_layout.setContentsMargins(6, 6, 6, 6)
+        group_layout.setSpacing(6)
+
+        # Kind and Purpose combos
         property_layout = QtWidgets.QHBoxLayout()
 
         property_layout.addWidget(QtWidgets.QLabel("Kind:"))
@@ -106,30 +134,39 @@ class UsdPrimEditor(QtWidgets.QWidget):
         property_layout.addWidget(self.purpose_combo)
 
         property_layout.addStretch()
-        layout.addLayout(property_layout)
+        group_layout.addLayout(property_layout)
 
-    def _setup_action_buttons(self, layout: QtWidgets.QVBoxLayout) -> None:
-        """Set up the Refresh and Apply buttons."""
+        # Action buttons
         button_layout = QtWidgets.QHBoxLayout()
 
         self.refresh_btn = QtWidgets.QPushButton("Refresh")
         button_layout.addWidget(self.refresh_btn)
 
         self.apply_btn = QtWidgets.QPushButton("Apply Changes")
+        self.apply_btn.setObjectName("primaryButton")
         button_layout.addWidget(self.apply_btn)
 
         button_layout.addStretch()
-        layout.addLayout(button_layout)
+        group_layout.addLayout(button_layout)
+
+        layout.addWidget(group)
 
     def _setup_stage_text_editor(self, layout: QtWidgets.QVBoxLayout) -> None:
         """Set up the stage text display and update button."""
+        group = QtWidgets.QGroupBox("Stage Layer (USD ASCII)")
+        group_layout = QtWidgets.QVBoxLayout(group)
+        group_layout.setContentsMargins(6, 6, 6, 6)
+        group_layout.setSpacing(6)
+
         self.stage_text_edit = QtWidgets.QPlainTextEdit()
         self.stage_text_edit.setReadOnly(True)
         self.stage_text_edit.setMaximumHeight(150)
-        layout.addWidget(self.stage_text_edit)
+        group_layout.addWidget(self.stage_text_edit)
 
         self.update_stage_btn = QtWidgets.QPushButton("Update Stage")
-        layout.addWidget(self.update_stage_btn)
+        group_layout.addWidget(self.update_stage_btn)
+
+        layout.addWidget(group)
 
     def _connect_signals(self) -> None:
         """Connect all signals to their handlers."""
@@ -292,10 +329,9 @@ class UsdPrimEditor(QtWidgets.QWidget):
         self.refresh_tree_view()
 
     def showEvent(self, event: QtCore.QEvent) -> None:
-        """Handle show event."""
-        if self.stage:
-            self.refresh_tree_view()
+        """Handle show event — auto-refresh from current Maya selection."""
         super().showEvent(event)
+        self.refresh_tree_view()
 
 
 class UsdPrimEditorWindow(QtWidgets.QMainWindow):
@@ -305,6 +341,7 @@ class UsdPrimEditorWindow(QtWidgets.QMainWindow):
         super().__init__(parent)
         self.setWindowTitle(WINDOW_TITLE)
         self.setCentralWidget(UsdPrimEditor())
+        apply_stylesheet(self)
 
 
 def show_usd_prim_editor() -> None:

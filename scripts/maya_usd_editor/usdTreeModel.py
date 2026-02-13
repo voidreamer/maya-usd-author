@@ -2,7 +2,7 @@
 
 from typing import List
 
-from PySide2 import QtGui, QtCore
+from .qt_compat import QtGui, QtCore
 from pxr import Usd
 
 from .usdUtils import get_prim_info, get_child_prims, PrimInfo, get_variant_sets, has_payload

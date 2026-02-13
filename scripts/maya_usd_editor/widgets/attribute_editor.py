@@ -3,7 +3,7 @@
 import logging
 from typing import Any, Callable, Optional
 
-from PySide2 import QtWidgets, QtCore, QtGui
+from ..qt_compat import QtWidgets, QtCore, QtGui
 from pxr import Usd, Sdf, UsdGeom, Gf
 
 from ..constants import AttributeColors
@@ -45,28 +45,34 @@ class AttributeEditor(QtWidgets.QWidget):
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
 
-        # Header
-        layout.addWidget(QtWidgets.QLabel("Attributes and Primvars:"))
+        group = QtWidgets.QGroupBox("Attributes & Primvars")
+        group_layout = QtWidgets.QVBoxLayout(group)
+        group_layout.setContentsMargins(6, 6, 6, 6)
+        group_layout.setSpacing(6)
 
         # Tree widget
         self.tree = QtWidgets.QTreeWidget()
         self.tree.setHeaderLabels(["Name", "Value"])
         self.tree.setItemDelegate(ColorCodedItemDelegate())
         self.tree.setAlternatingRowColors(True)
-        layout.addWidget(self.tree)
+        group_layout.addWidget(self.tree)
 
         # Buttons
         button_layout = QtWidgets.QHBoxLayout()
         self.add_attr_btn = QtWidgets.QPushButton("Add Attribute")
         self.add_primvar_btn = QtWidgets.QPushButton("Add Primvar")
-        self.edit_btn = QtWidgets.QPushButton("Edit")
-        self.remove_btn = QtWidgets.QPushButton("Remove")
 
         button_layout.addWidget(self.add_attr_btn)
         button_layout.addWidget(self.add_primvar_btn)
+        button_layout.addStretch()
+
+        self.edit_btn = QtWidgets.QPushButton("Edit")
+        self.remove_btn = QtWidgets.QPushButton("Remove")
         button_layout.addWidget(self.edit_btn)
         button_layout.addWidget(self.remove_btn)
-        layout.addLayout(button_layout)
+        group_layout.addLayout(button_layout)
+
+        layout.addWidget(group)
 
     def _connect_signals(self) -> None:
         """Connect internal signals."""

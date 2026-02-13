@@ -3,7 +3,7 @@
 import logging
 from typing import Optional
 
-from PySide2 import QtWidgets, QtCore
+from ..qt_compat import QtWidgets, QtCore
 from pxr import Usd
 
 from ..usdUtils import get_variant_sets, set_variant_selection
@@ -31,15 +31,12 @@ class VariantEditor(QtWidgets.QWidget):
         self._layout = QtWidgets.QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
 
-        # Header label
-        self._header = QtWidgets.QLabel("Variant Sets:")
-        self._layout.addWidget(self._header)
-
-        # Container for dynamic variant set controls
-        self._variant_container = QtWidgets.QWidget()
-        self._variant_layout = QtWidgets.QVBoxLayout(self._variant_container)
-        self._variant_layout.setContentsMargins(0, 0, 0, 0)
-        self._layout.addWidget(self._variant_container)
+        # Group box replaces header label + container
+        self._group = QtWidgets.QGroupBox("Variant Sets")
+        self._variant_layout = QtWidgets.QVBoxLayout(self._group)
+        self._variant_layout.setContentsMargins(6, 6, 6, 6)
+        self._variant_layout.setSpacing(6)
+        self._layout.addWidget(self._group)
 
     def set_prim(self, prim: Optional[Usd.Prim]) -> None:
         """Set the current prim to display variant sets for.
@@ -61,7 +58,7 @@ class VariantEditor(QtWidgets.QWidget):
 
         if not variant_sets:
             no_variants_label = QtWidgets.QLabel("No variant sets")
-            no_variants_label.setStyleSheet("color: gray; font-style: italic;")
+            no_variants_label.setObjectName("dimLabel")
             self._variant_layout.addWidget(no_variants_label)
             return
 

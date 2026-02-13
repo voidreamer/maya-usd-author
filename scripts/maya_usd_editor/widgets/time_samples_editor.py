@@ -3,7 +3,7 @@
 import logging
 from typing import Any, Optional
 
-from PySide2 import QtWidgets, QtCore
+from ..qt_compat import QtWidgets, QtCore
 from pxr import Usd, Sdf, Gf
 
 logger = logging.getLogger(__name__)
